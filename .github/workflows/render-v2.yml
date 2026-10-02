@@ -1,0 +1,53 @@
+name: Render motion rebuild v2
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install render dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python -m pip install numpy Pillow opencv-contrib-python-headless==4.13.0.92
+          sudo mkdir -p /data
+          sudo chown "$USER" /data
+          ln -s "$GITHUB_WORKSPACE" /data/why-we-become-everyone-else-living-better
+          mkdir -p /data/restore /data/fonts /data/sr_models v2/qa
+          cp inputs/Pictures.zip /data/restore/Pictures.zip
+          cp inputs/voiceover.mp3 /data/restore/voiceover.mp3
+          curl -fsSL https://raw.githubusercontent.com/Saafke/FSRCNN_Tensorflow/master/models/FSRCNN_x4.pb -o /data/sr_models/FSRCNN_x4.pb
+          for w in Black ExtraBold Bold; do curl -fsSL https://raw.githubusercontent.com/JulietaUla/Montserrat/master/fonts/ttf/Montserrat-$w.ttf -o /data/fonts/Montserrat-$w.ttf; done
+      - name: Synchronize panels, reconstruct artwork, and master sound
+        run: |
+          python v2/plan.py
+          ffmpeg -y -loglevel error -i inputs/voiceover.mp3 -ar 44100 -ac 1 voiceover.wav
+          python v2/upscale.py
+          python v2/prepare_audio.py
+          python v2/build_audio.py
+      - name: Render complete motion-graphics video
+        run: |
+          python v2/render_motion.py stills
+          python v2/render_motion.py
+          ffprobe -v error -show_format -show_streams -of json final-v2-motion.mp4 > v2/technical-qa.json
+          ffmpeg -i final-v2-motion.mp4 -af loudnorm=print_format=json -f null - 2> v2/loudness-qa.log
+          for t in 18 137 167 266 288 386 462 494 530 571 626 652; do ffmpeg -y -loglevel error -ss $t -i final-v2-motion.mp4 -frames:v 1 v2/qa/final-$t.png; done
+          zip -q -r motion-project-v2.zip v2/*.py v2/*.json v2/*.md v2/captions.ass script.md voiceover.json assets/
+          zip -q -r motion-review-v2.zip v2/qa v2/technical-qa.json v2/loudness-qa.log
+      - name: Publish private versioned release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TAG="v2-motion-${GITHUB_RUN_ID}"
+          gh release create "$TAG" --title 'Narration-synced motion-graphics rebuild v2' --notes '109 redesigned scenes. All 90 panels remapped to narration. Neural 4x artwork reconstruction, animated diagrams throughout, revised captions, and synchronized sound design. Prior version preserved.'
+          cp v2/seo.md seo-v2.md
+          gh release upload "$TAG" final-v2-motion.mp4 thumbnail.png seo-v2.md transcript.txt v2/panel_sync_review.md motion-project-v2.zip motion-review-v2.zip
+          gh release view "$TAG" --json url
