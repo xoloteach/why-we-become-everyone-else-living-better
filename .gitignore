@@ -1,0 +1,15 @@
+frames/
+sheets_raw/
+audio/
+*.zip
+*.mp4
+*.wav
+*.mp3
+montage.jpg
+q*.png
+t*.png
+testcheck.jpg
+qa.jpg
+.env
+*.pid
+*.log
