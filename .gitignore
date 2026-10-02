@@ -13,3 +13,12 @@ qa.jpg
 .env
 *.pid
 *.log
+
+v2/native/
+v2/upscaled/
+v2/layers/
+v2/qa/
+*.wav
+*.mp4
+*.log
+*.pid
