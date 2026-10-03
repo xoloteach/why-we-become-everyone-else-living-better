@@ -71,12 +71,25 @@ def dots(f,c,s,t):
  for j in range(100):
   a=B.ease((t-s['start']-j*.001)/.45);col=RC if phase==5 and j>=95 else (mut if phase!=100 else fg);cv2.circle(f,(110+j%10*27,1040+j//10*27),max(1,int(7*a)),col,1 if phase==95 and j>=95 else -1,cv2.LINE_AA)
  a=B.ease((t-max(s['start'],2.24))/.4);B.text(f,str(phase),456,1037,132,RC if phase==5 else fg,390,alpha=a,weight='Black');B.text(f,'EXCITING' if phase==5 else ('ORDINARY' if phase==95 else 'PEOPLE'),456,1212,32,fg,390,alpha=a);B.text(f,'THOUGHT EXPERIMENT',110,1322,24,mut,780)
+def native_paths(f,s,t):
+ x,y,w=87,1030,790;r=t-s['start'];D=s['end']-s['start'];fg=WH if s['dark'] else I;mut=(155,164,174) if s['dark'] else (114,121,127)
+ for j,l in enumerate(s['labels'][:2]):
+  a=B.spring((t-s['cues'][j])/.55);yy=y+85+j*144;B.text(f,l,x,yy-73,30,fg,w,alpha=a)
+  ps=np.array([(x+15,yy),(x+w-20,yy)] if j==0 else [(x+15,yy),(x+150,yy),(x+300,yy-30),(x+440,yy+20),(x+610,yy),(x+w-20,yy-45)],float);B.path(f,ps,mut if j==0 else RC,4,a,True)
+  if a>.8:
+   lengths=np.linalg.norm(np.diff(ps,axis=0),axis=1);d=lengths.sum()*(r/max(D,1)*.65+.12)
+   for k,L in enumerate(lengths):
+    if d<=L:pt=ps[k]+(ps[k+1]-ps[k])*d/max(L,.001);break
+    d-=L
+   else:pt=ps[-1]
+   cv2.circle(f,tuple(pt.astype(int)),11,RC if j else fg,-1,cv2.LINE_AA)
 def scene(c,j,t):
  s=c['scenes'][j];r=t-s['start'];fg=WH if s['dark'] else I;f=BG[s['dark']].copy();B.text(f,'WHY WE BECOME',85,119,26,fg,400,weight='Black');B.text(f,c['topic'],534,124,21,RC,350);B.line(f,(85,181),(900,181),(52,61,66) if s['dark'] else (222,231,237),1);sz=86;a=B.glyph(s['title'],sz,fg,805,'Black')
  while a.shape[0]>244 and sz>62:sz-=2;a=B.glyph(s['title'],sz,fg,805,'Black')
  assert a.shape[0]<=260
  en=1 if j==0 else B.spring(r/.42);B.blit(f,a,87,225+(1-en)*17,en);B.line(f,(90,490),(230,490),RC,5,B.ease((r+.05)/.45));art(f,s,t)
  if s['kind']=='dots':dots(f,c,s,t)
+ elif s['kind']=='paths':native_paths(f,s,t)
  else:B.diagram(f,s,t,87,1030,790,320)
  B.line(f,(85,1620),(900,1620),(55,62,67) if s['dark'] else (220,230,236),2);B.line(f,(85,1620),(900,1620),RC,4,t/c['duration']);B.text(f,'THINK DEEPER. LIVE BETTER.',85,1672,22,fg,810);return f
 end=cv2.imread('assets/subscribe-end-card.jpeg');ew=935;eh=round(end.shape[0]*ew/end.shape[1]);end=cv2.resize(end,(ew,eh),interpolation=cv2.INTER_LANCZOS4)
