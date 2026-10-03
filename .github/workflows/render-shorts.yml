@@ -1,0 +1,59 @@
+name: Render three native portrait Shorts
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prepare free CPU renderer
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python -m pip install numpy Pillow opencv-contrib-python-headless==4.13.0.92
+          sudo mkdir -p /data
+          sudo chown "$USER" /data
+          ln -s "$GITHUB_WORKSPACE" /data/why-we-become-everyone-else-living-better
+          mkdir -p /data/restore /data/fonts /data/sr_models
+          cp inputs/Pictures.zip /data/restore/Pictures.zip
+          curl -fsSL https://raw.githubusercontent.com/Saafke/FSRCNN_Tensorflow/master/models/FSRCNN_x4.pb -o /data/sr_models/FSRCNN_x4.pb
+          for w in Black ExtraBold Bold; do curl -fsSL https://raw.githubusercontent.com/JulietaUla/Montserrat/master/fonts/ttf/Montserrat-$w.ttf -o /data/fonts/Montserrat-$w.ttf; done
+      - name: Prepare narration and reconstructed artwork
+        run: |
+          python v2/plan.py
+          ffmpeg -y -loglevel error -i inputs/voiceover.mp3 -ar 44100 -ac 1 voiceover.wav
+          python v2/upscale.py
+      - name: Render and verify three native Shorts
+        run: python shorts/render_shorts.py
+      - name: Package deliverables
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+          root=Path('shorts/output')
+          with zipfile.ZipFile(root/'shorts-pack.zip','w',zipfile.ZIP_DEFLATED) as z:
+              for f in root.iterdir():
+                  if f.is_file() and f.suffix in ('.mp4','.png','.md','.json','.ass'):z.write(f,f.name)
+              for name in ['shorts/render_shorts.py','shorts/README.md','.github/workflows/render-shorts.yml','v2/plan.py','v2/upscale.py','v2/render_motion.py','build_timeline.py']:z.write(name,'source/'+name)
+          with zipfile.ZipFile(root/'shorts-review.zip','w',zipfile.ZIP_DEFLATED) as z:
+              for f in (root/'qa').glob('*.png'):z.write(f,f.name)
+          PY
+      - name: Save files for visual review before release
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-shorts-review
+          retention-days: 14
+          path: |
+            shorts/output/*.mp4
+            shorts/output/*.png
+            shorts/output/*.md
+            shorts/output/*.json
+            shorts/output/*.ass
+            shorts/output/*.zip
+            shorts/output/qa/*.png
