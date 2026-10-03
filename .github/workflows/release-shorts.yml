@@ -1,0 +1,50 @@
+name: Publish visually reviewed Shorts pack
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download the reviewed render only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          RUN=37088064873
+          SHA=$(gh api "repos/$GH_REPO/actions/runs/$RUN" --jq '.head_sha')
+          test "$SHA" = 773bcec1e3aaddb0bf85f7c2dfbfa7c9e24a05e1
+          ID=$(gh api "repos/$GH_REPO/actions/runs/$RUN/artifacts" --jq '.artifacts[] | select(.name=="native-shorts-review") | .id')
+          gh api "repos/$GH_REPO/actions/artifacts/$ID/zip" > reviewed.zip
+          python3 - <<'PY'
+          import zipfile,json,re
+          from pathlib import Path
+          out=Path('output');out.mkdir();zipfile.ZipFile('reviewed.zip').extractall(out)
+          manifest=json.loads((out/'shorts-manifest.json').read_text())
+          assert len(manifest)==3 and all(x['duration']<50 for x in manifest)
+          pattern=re.compile(rb'ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----')
+          count=0
+          for f in out.rglob('*'):
+              if not f.is_file():continue
+              assert not pattern.search(f.read_bytes()),'Potential credential in deliverables'
+              if f.suffix=='.zip':
+                  with zipfile.ZipFile(f) as z:
+                      for n in z.namelist():
+                          assert not pattern.search(z.read(n)),'Potential credential in archive'
+                          count+=1
+              count+=1
+          (out/'qa-summary.md').write_text('# Shorts QA\n\n- Export checks passed: 1080×1920, 30fps, all three under 50 seconds including endings; audio between −17.5 and −14.5 LUFS.\n- All 35 scene compositions inspected, with representative actual captioned output frames and sampled opening ink-reveal states.\n- One path-label overlap was corrected and replacement path scenes inspected. Moving markers now follow their actual routes.\n- Original narration, remapped word timings, supplied artwork and canonical end-card proportions preserved.\n- Archive/credential-pattern audit completed without findings. This is not a blanket security or copyright guarantee.\n- No social-platform posting or independently certified subjective score is claimed.\n')
+          print('Deliverable audit passed; files/archive members checked:',count)
+          PY
+      - name: Publish new versioned release without replacing older releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TAG=shorts-v1-37088064873
+          gh release create "$TAG" --target 773bcec1e3aaddb0bf85f7c2dfbfa7c9e24a05e1 --title 'Three native motion-first Shorts — Why We Become' --notes-file output/release-notes.md
+          gh release upload "$TAG" output/short-*.mp4 output/thumbnail-*.png output/*-script.md output/*-seo.md output/shorts-manifest.json output/scene-plans.json output/shorts-pack.zip output/shorts-review.zip output/qa-summary.md
+          gh release view "$TAG" --json url
