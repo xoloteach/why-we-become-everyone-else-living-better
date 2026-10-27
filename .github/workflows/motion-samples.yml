@@ -1,0 +1,29 @@
+name: Motion tool samples
+on:
+  push:
+    branches: ['codex/motion-samples']
+    paths: ['motion-lab/**', '.github/workflows/motion-samples.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  samples:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: motion-lab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm run render
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: motion-tool-samples
+          path: motion-lab/output/
+          retention-days: 14
